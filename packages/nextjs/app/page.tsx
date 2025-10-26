@@ -5,25 +5,58 @@ import { AISuggestionModal } from "../components/MemeVault/AISuggestionModal";
 import { DepositForm } from "../components/MemeVault/DepositForm";
 import { YieldDashboard } from "../components/MemeVault/YieldDashboard";
 import type { NextPage } from "next";
-import { parseEther } from "viem";
-import { useAccount, useWriteContract } from "wagmi";
+import { type Hash, parseEther } from "viem";
+import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { Address, Balance } from "~~/components/scaffold-eth";
 import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+
+type PendingDeposit = {
+  token: string;
+  amount: string;
+  chain: string;
+  tokenLabel?: string;
+  tokenSymbol?: string;
+  tokenEmoji?: string;
+  chainLabel?: string;
+  chainEmoji?: string;
+};
+
+const TOKEN_METADATA: Record<string, { label: string; symbol: string; emoji?: string }> = {
+  "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9": { label: "PEPE", symbol: "PEPE", emoji: "🐸" },
+  "0x5fc8d32690cc91d4c39d9d3abcbd16989f875707": { label: "DOGE", symbol: "DOGE", emoji: "🐶" },
+};
+
+const CHAIN_METADATA: Record<string, { label: string; emoji?: string }> = {
+  Sepolia: { label: "Sepolia Testnet", emoji: "🧪" },
+  Base: { label: "Base Sepolia", emoji: "🟦" },
+};
 
 const Home: NextPage = () => {
   const { address: connectedAddress, isConnected } = useAccount();
   const [showAISuggestion, setShowAISuggestion] = useState(false);
-  const [pendingDeposit, setPendingDeposit] = useState<{
-    token: string;
-    amount: string;
-    chain: string;
-  } | null>(null);
+  const [pendingDeposit, setPendingDeposit] = useState<PendingDeposit | null>(null);
 
-  const { writeContractAsync: writeMemeVaultAsync } = useScaffoldWriteContract("MemeVault");
+  const publicClient = usePublicClient();
+  const { writeContractAsync: writeMemeVaultAsync } = useScaffoldWriteContract({
+    contractName: "MemeVault",
+    disableSimulate: true,
+  });
   const { writeContractAsync } = useWriteContract();
 
   const handleDepositSubmit = (token: string, amount: string, chain: string) => {
-    setPendingDeposit({ token, amount, chain });
+    const tokenInfo = TOKEN_METADATA[token.toLowerCase()];
+    const chainInfo = CHAIN_METADATA[chain];
+
+    setPendingDeposit({
+      token,
+      amount,
+      chain,
+      tokenLabel: tokenInfo?.label,
+      tokenSymbol: tokenInfo?.symbol,
+      tokenEmoji: tokenInfo?.emoji,
+      chainLabel: chainInfo?.label,
+      chainEmoji: chainInfo?.emoji,
+    });
     setShowAISuggestion(true);
   };
 
@@ -65,7 +98,7 @@ const Home: NextPage = () => {
       const amountInWei = parseEther(pendingDeposit.amount);
 
       // First, approve the MemeVault contract to spend the tokens
-      await writeContractAsync({
+      const approvalTxHash = (await writeContractAsync({
         address: pendingDeposit.token as `0x${string}`,
         abi: [
           {
@@ -81,7 +114,11 @@ const Home: NextPage = () => {
         ],
         functionName: "approve",
         args: ["0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9", amountInWei], // MemeVault address
-      });
+      })) as Hash;
+
+      if (publicClient) {
+        await publicClient.waitForTransactionReceipt({ hash: approvalTxHash });
+      }
 
       // Then, deposit to the vault
       await writeMemeVaultAsync({
