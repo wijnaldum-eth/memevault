@@ -9,6 +9,11 @@ interface AISuggestionModalProps {
     token: string;
     amount: string;
     chain: string;
+    tokenLabel?: string;
+    tokenSymbol?: string;
+    tokenEmoji?: string;
+    chainLabel?: string;
+    chainEmoji?: string;
   } | null;
   onConfirm: () => void;
 }
@@ -20,6 +25,10 @@ export const AISuggestionModal = ({ isOpen, onClose, deposit, onConfirm }: AISug
 
   const suggestedAPY = deposit.chain === "Base" ? "12%" : "8%";
   const suggestedVault = deposit.chain === "Base" ? "BaseMoonwell" : "SepoliaMock";
+
+  const tokenDisplay =
+    `${deposit.tokenEmoji ?? ""} ${deposit.tokenLabel ?? deposit.tokenSymbol ?? deposit.token}`.trim();
+  const chainDisplay = `${deposit.chainEmoji ?? ""} ${deposit.chainLabel ?? deposit.chain}`.trim();
 
   const handleConfirm = async () => {
     setIsConfirming(true);
@@ -47,11 +56,11 @@ export const AISuggestionModal = ({ isOpen, onClose, deposit, onConfirm }: AISug
             </div>
             <div className="flex justify-between items-center mb-2">
               <span className="text-gray-600">Token:</span>
-              <span className="font-mono text-sm">{deposit.token}</span>
+              <span className="font-mono text-sm">{tokenDisplay}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Target Chain:</span>
-              <span className="font-semibold">{deposit.chain}</span>
+              <span className="font-semibold">{chainDisplay}</span>
             </div>
           </div>
 
