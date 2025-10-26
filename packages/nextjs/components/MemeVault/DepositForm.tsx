@@ -1,22 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EtherInput } from "~~/components/scaffold-eth";
+
+export type TokenOption = {
+  name: string;
+  address?: string;
+  symbol?: string;
+  emoji?: string;
+};
 
 interface DepositFormProps {
   onSubmit: (token: string, amount: string, chain: string) => void;
+  presetTokens?: TokenOption[];
 }
 
-export const DepositForm = ({ onSubmit }: DepositFormProps) => {
+export const DepositForm = ({ onSubmit, presetTokens }: DepositFormProps) => {
   const [tokenAddress, setTokenAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [chain, setChain] = useState("Sepolia");
   const [isLoading, setIsLoading] = useState(false);
 
-  const presetTokens = [
-    { name: "PEPE", address: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9" },
-    { name: "DOGE", address: "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707" },
-  ];
+  const availableTokens = useMemo(() => {
+    return (presetTokens ?? []).filter((token): token is TokenOption & { address: string } => Boolean(token.address));
+  }, [presetTokens]);
+
+  useEffect(() => {
+    if (!tokenAddress && availableTokens.length > 0) {
+      setTokenAddress(availableTokens[0].address);
+    }
+  }, [availableTokens, tokenAddress]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,16 +48,19 @@ export const DepositForm = ({ onSubmit }: DepositFormProps) => {
       <div>
         <label className="block text-white text-sm font-medium mb-2">Choose Token</label>
         <div className="grid grid-cols-2 gap-3 mb-4">
-          {presetTokens.map(token => (
+          {(presetTokens ?? []).map(token => (
             <button
-              key={token.address}
+              key={token.address ?? token.name}
               type="button"
-              onClick={() => setTokenAddress(token.address)}
+              onClick={() => token.address && setTokenAddress(token.address)}
+              disabled={!token.address}
               className={`px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
-                tokenAddress === token.address ? "bg-yellow-400 text-black" : "bg-white/20 text-white hover:bg-white/30"
+                token.address && tokenAddress === token.address
+                  ? "bg-yellow-400 text-black"
+                  : "bg-white/20 text-white hover:bg-white/30 disabled:opacity-40 disabled:cursor-not-allowed"
               }`}
             >
-              {token.name}
+              {token.emoji ? `${token.emoji} ${token.name}` : token.name}
             </button>
           ))}
         </div>
@@ -85,6 +101,12 @@ export const DepositForm = ({ onSubmit }: DepositFormProps) => {
       >
         {isLoading ? "Analyzing..." : "🚀 Deposit & Get AI Suggestion"}
       </button>
+
+      {availableTokens.length === 0 && (
+        <p className="text-sm text-yellow-200 text-center">
+          No preset tokens detected for this network yet—enter a custom token address after deploying the mocks.
+        </p>
+      )}
     </form>
   );
 };

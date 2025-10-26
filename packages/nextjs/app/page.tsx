@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AISuggestionModal } from "../components/MemeVault/AISuggestionModal";
-import { DepositForm } from "../components/MemeVault/DepositForm";
+import { DepositForm, type TokenOption } from "../components/MemeVault/DepositForm";
 import { YieldDashboard } from "../components/MemeVault/YieldDashboard";
 import type { NextPage } from "next";
-import { type Hash, parseEther } from "viem";
+import type { Address as AddressType, Hash } from "viem";
+import { parseEther } from "viem";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
-import { Address, Balance } from "~~/components/scaffold-eth";
-import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { Address as AddressDisplay, Balance } from "~~/components/scaffold-eth";
+import { useDeployedContractInfo, useScaffoldWriteContract, useTargetNetwork } from "~~/hooks/scaffold-eth";
 
 type PendingDeposit = {
   token: string;
@@ -21,11 +22,6 @@ type PendingDeposit = {
   chainEmoji?: string;
 };
 
-const TOKEN_METADATA: Record<string, { label: string; symbol: string; emoji?: string }> = {
-  "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9": { label: "PEPE", symbol: "PEPE", emoji: "🐸" },
-  "0x5fc8d32690cc91d4c39d9d3abcbd16989f875707": { label: "DOGE", symbol: "DOGE", emoji: "🐶" },
-};
-
 const CHAIN_METADATA: Record<string, { label: string; emoji?: string }> = {
   Sepolia: { label: "Sepolia Testnet", emoji: "🧪" },
   Base: { label: "Base Sepolia", emoji: "🟦" },
@@ -33,6 +29,7 @@ const CHAIN_METADATA: Record<string, { label: string; emoji?: string }> = {
 
 const Home: NextPage = () => {
   const { address: connectedAddress, isConnected } = useAccount();
+  useTargetNetwork();
   const [showAISuggestion, setShowAISuggestion] = useState(false);
   const [pendingDeposit, setPendingDeposit] = useState<PendingDeposit | null>(null);
 
@@ -42,16 +39,33 @@ const Home: NextPage = () => {
     disableSimulate: true,
   });
   const { writeContractAsync } = useWriteContract();
+  const { data: memeVaultContract } = useDeployedContractInfo({ contractName: "MemeVault" });
+  const { data: pepeContract } = useDeployedContractInfo({ contractName: "PEPE" });
+  const { data: dogeContract } = useDeployedContractInfo({ contractName: "DOGE" });
+
+  const tokenOptions = useMemo<TokenOption[]>(() => {
+    const options: TokenOption[] = [];
+
+    if (pepeContract?.address) {
+      options.push({ name: "PEPE", symbol: "PEPE", emoji: "🐸", address: pepeContract.address });
+    }
+
+    if (dogeContract?.address) {
+      options.push({ name: "DOGE", symbol: "DOGE", emoji: "🐶", address: dogeContract.address });
+    }
+
+    return options;
+  }, [dogeContract?.address, pepeContract?.address]);
 
   const handleDepositSubmit = (token: string, amount: string, chain: string) => {
-    const tokenInfo = TOKEN_METADATA[token.toLowerCase()];
+    const tokenInfo = tokenOptions.find(option => option.address?.toLowerCase() === token.toLowerCase());
     const chainInfo = CHAIN_METADATA[chain];
 
     setPendingDeposit({
       token,
       amount,
       chain,
-      tokenLabel: tokenInfo?.label,
+      tokenLabel: tokenInfo?.name,
       tokenSymbol: tokenInfo?.symbol,
       tokenEmoji: tokenInfo?.emoji,
       chainLabel: chainInfo?.label,
@@ -60,9 +74,14 @@ const Home: NextPage = () => {
     setShowAISuggestion(true);
   };
 
-  const handleMintTokens = async (tokenAddress: string, amount: string) => {
+  const handleMintTokens = async (tokenAddress: AddressType | undefined, amount: string) => {
     if (!connectedAddress) {
       console.error("No wallet connected");
+      return;
+    }
+
+    if (!tokenAddress) {
+      console.error("Token address not available on this network");
       return;
     }
 
@@ -82,7 +101,7 @@ const Home: NextPage = () => {
           },
         ],
         functionName: "mint",
-        args: [connectedAddress!, parseEther(amount)],
+        args: [connectedAddress as AddressType, parseEther(amount)],
       });
       console.log("Tokens minted successfully!");
     } catch (error) {
@@ -96,6 +115,12 @@ const Home: NextPage = () => {
     try {
       // Convert amount to wei (assuming 18 decimals for simplicity)
       const amountInWei = parseEther(pendingDeposit.amount);
+      const memeVaultAddress = memeVaultContract?.address;
+
+      if (!memeVaultAddress) {
+        console.error("MemeVault contract address not available on this network");
+        return;
+      }
 
       // First, approve the MemeVault contract to spend the tokens
       const approvalTxHash = (await writeContractAsync({
@@ -113,7 +138,7 @@ const Home: NextPage = () => {
           },
         ],
         functionName: "approve",
-        args: ["0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9", amountInWei], // MemeVault address
+        args: [memeVaultAddress, amountInWei],
       })) as Hash;
 
       if (publicClient) {
@@ -148,7 +173,7 @@ const Home: NextPage = () => {
             {isConnected ? (
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 inline-block">
                 <p className="text-white mb-2">Connected Wallet:</p>
-                <Address address={connectedAddress} />
+                <AddressDisplay address={connectedAddress} />
               </div>
             ) : (
               <p className="text-yellow-300">Connect your wallet to start earning yields!</p>
@@ -163,16 +188,18 @@ const Home: NextPage = () => {
                 <p className="text-gray-300 mb-4">Mint PEPE or DOGE tokens to your wallet for testing</p>
                 <div className="grid grid-cols-2 gap-4">
                   <button
-                    onClick={() => handleMintTokens("0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9", "1000")}
-                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition-colors"
+                    onClick={() => handleMintTokens(pepeContract?.address, "1000")}
+                    disabled={!pepeContract?.address}
+                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Mint 1000 PEPE
+                    {pepeContract?.address ? "Mint 1000 PEPE" : "PEPE unavailable"}
                   </button>
                   <button
-                    onClick={() => handleMintTokens("0x5FC8d32690cc91D4c39d9d3abcBD16989F875707", "1000")}
-                    className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg transition-colors"
+                    onClick={() => handleMintTokens(dogeContract?.address, "1000")}
+                    disabled={!dogeContract?.address}
+                    className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Mint 1000 DOGE
+                    {dogeContract?.address ? "Mint 1000 DOGE" : "DOGE unavailable"}
                   </button>
                 </div>
               </div>
@@ -186,7 +213,7 @@ const Home: NextPage = () => {
               {/* Deposit Form */}
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
                 <h2 className="text-2xl font-bold text-white mb-4">Deposit Meme Coins</h2>
-                <DepositForm onSubmit={handleDepositSubmit} />
+                <DepositForm onSubmit={handleDepositSubmit} presetTokens={tokenOptions} />
               </div>
 
               {/* Yield Dashboard */}
