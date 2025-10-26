@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { AISuggestionModal } from "../components/MemeVault/AISuggestionModal";
 import { DepositForm, type TokenOption } from "../components/MemeVault/DepositForm";
 import { YieldDashboard } from "../components/MemeVault/YieldDashboard";
+import { PythPriceGrid } from "../components/PythPriceDisplay";
 import type { NextPage } from "next";
 import type { Address as AddressType, Hash } from "viem";
 import { parseEther } from "viem";
@@ -42,6 +43,8 @@ const Home: NextPage = () => {
   const { data: memeVaultContract } = useDeployedContractInfo({ contractName: "MemeVault" });
   const { data: pepeContract } = useDeployedContractInfo({ contractName: "PEPE" });
   const { data: dogeContract } = useDeployedContractInfo({ contractName: "DOGE" });
+  const { data: wsolContract } = useDeployedContractInfo({ contractName: "wSOL" as any });
+  const { data: wbtcContract } = useDeployedContractInfo({ contractName: "wBTC" as any });
 
   const tokenOptions = useMemo<TokenOption[]>(() => {
     const options: TokenOption[] = [];
@@ -54,8 +57,16 @@ const Home: NextPage = () => {
       options.push({ name: "DOGE", symbol: "DOGE", emoji: "🐶", address: dogeContract.address });
     }
 
+    if (wsolContract?.address) {
+      options.push({ name: "Wrapped Solana", symbol: "wSOL", emoji: "◎", address: wsolContract.address });
+    }
+
+    if (wbtcContract?.address) {
+      options.push({ name: "Wrapped Bitcoin", symbol: "wBTC", emoji: "₿", address: wbtcContract.address });
+    }
+
     return options;
-  }, [dogeContract?.address, pepeContract?.address]);
+  }, [dogeContract?.address, pepeContract?.address, wsolContract?.address, wbtcContract?.address]);
 
   const handleDepositSubmit = (token: string, amount: string, chain: string) => {
     const tokenInfo = tokenOptions.find(option => option.address?.toLowerCase() === token.toLowerCase());
@@ -182,24 +193,45 @@ const Home: NextPage = () => {
 
           {isConnected && (
             <div className="space-y-8">
+              {/* Pyth Price Feeds */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+                <h2 className="text-2xl font-bold text-white mb-4">💰 Real-Time Prices (Powered by Pyth)</h2>
+                <p className="text-gray-300 mb-4">Live price feeds updated every 10 seconds</p>
+                <PythPriceGrid tokens={["BTC", "ETH", "SOL"]} />
+              </div>
+
               {/* Mint Tokens Section */}
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
                 <h2 className="text-2xl font-bold text-white mb-4">Get Test Tokens</h2>
-                <p className="text-gray-300 mb-4">Mint PEPE or DOGE tokens to your wallet for testing</p>
+                <p className="text-gray-300 mb-4">Mint tokens to your wallet for testing</p>
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => handleMintTokens(pepeContract?.address, "1000")}
                     disabled={!pepeContract?.address}
                     className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {pepeContract?.address ? "Mint 1000 PEPE" : "PEPE unavailable"}
+                    {pepeContract?.address ? "🐸 Mint 1000 PEPE" : "PEPE unavailable"}
                   </button>
                   <button
                     onClick={() => handleMintTokens(dogeContract?.address, "1000")}
                     disabled={!dogeContract?.address}
                     className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {dogeContract?.address ? "Mint 1000 DOGE" : "DOGE unavailable"}
+                    {dogeContract?.address ? "🐶 Mint 1000 DOGE" : "DOGE unavailable"}
+                  </button>
+                  <button
+                    onClick={() => handleMintTokens(wsolContract?.address, "100")}
+                    disabled={!wsolContract?.address}
+                    className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {wsolContract?.address ? "◎ Mint 100 wSOL" : "wSOL unavailable"}
+                  </button>
+                  <button
+                    onClick={() => handleMintTokens(wbtcContract?.address, "1")}
+                    disabled={!wbtcContract?.address}
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {wbtcContract?.address ? "₿ Mint 1 wBTC" : "wBTC unavailable"}
                   </button>
                 </div>
               </div>
