@@ -1,70 +1,174 @@
 "use client";
 
-import Link from "next/link";
+import { useState } from "react";
+import { AISuggestionModal } from "../components/MemeVault/AISuggestionModal";
+import { DepositForm } from "../components/MemeVault/DepositForm";
+import { YieldDashboard } from "../components/MemeVault/YieldDashboard";
 import type { NextPage } from "next";
-import { useAccount } from "wagmi";
-import { BugAntIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { Address } from "~~/components/scaffold-eth";
+import { parseEther } from "viem";
+import { useAccount, useWriteContract } from "wagmi";
+import { Address, Balance } from "~~/components/scaffold-eth";
+import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
 const Home: NextPage = () => {
-  const { address: connectedAddress } = useAccount();
+  const { address: connectedAddress, isConnected } = useAccount();
+  const [showAISuggestion, setShowAISuggestion] = useState(false);
+  const [pendingDeposit, setPendingDeposit] = useState<{
+    token: string;
+    amount: string;
+    chain: string;
+  } | null>(null);
+
+  const { writeContractAsync: writeMemeVaultAsync } = useScaffoldWriteContract("MemeVault");
+  const { writeContractAsync } = useWriteContract();
+
+  const handleDepositSubmit = (token: string, amount: string, chain: string) => {
+    setPendingDeposit({ token, amount, chain });
+    setShowAISuggestion(true);
+  };
+
+  const handleMintTokens = async (tokenAddress: string, amount: string) => {
+    if (!connectedAddress) {
+      console.error("No wallet connected");
+      return;
+    }
+
+    try {
+      await writeContractAsync({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            inputs: [
+              { internalType: "address", name: "to", type: "address" },
+              { internalType: "uint256", name: "amount", type: "uint256" },
+            ],
+            name: "mint",
+            outputs: [],
+            stateMutability: "nonpayable",
+            type: "function",
+          },
+        ],
+        functionName: "mint",
+        args: [connectedAddress!, parseEther(amount)],
+      });
+      console.log("Tokens minted successfully!");
+    } catch (error) {
+      console.error("Minting failed:", error);
+    }
+  };
+
+  const handleAIConfirm = async () => {
+    if (!pendingDeposit) return;
+
+    try {
+      // Convert amount to wei (assuming 18 decimals for simplicity)
+      const amountInWei = parseEther(pendingDeposit.amount);
+
+      // First, approve the MemeVault contract to spend the tokens
+      await writeContractAsync({
+        address: pendingDeposit.token as `0x${string}`,
+        abi: [
+          {
+            inputs: [
+              { internalType: "address", name: "spender", type: "address" },
+              { internalType: "uint256", name: "amount", type: "uint256" },
+            ],
+            name: "approve",
+            outputs: [{ internalType: "bool", name: "", type: "bool" }],
+            stateMutability: "nonpayable",
+            type: "function",
+          },
+        ],
+        functionName: "approve",
+        args: ["0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9", amountInWei], // MemeVault address
+      });
+
+      // Then, deposit to the vault
+      await writeMemeVaultAsync({
+        functionName: "deposit",
+        args: [pendingDeposit.token, amountInWei, pendingDeposit.chain],
+      });
+
+      console.log("Deposit executed successfully!");
+      setShowAISuggestion(false);
+      setPendingDeposit(null);
+    } catch (error) {
+      console.error("Deposit failed:", error);
+      // TODO: Show error toast
+    }
+  };
 
   return (
     <>
-      <div className="flex items-center flex-col grow pt-10">
-        <div className="px-5">
-          <h1 className="text-center">
-            <span className="block text-2xl mb-2">Welcome to</span>
-            <span className="block text-4xl font-bold">Scaffold-ETH 2</span>
-          </h1>
-          <div className="flex justify-center items-center space-x-2 flex-col">
-            <p className="my-2 font-medium">Connected Address:</p>
-            <Address address={connectedAddress} />
+      <div className="flex items-center flex-col grow pt-10 min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-green-900">
+        <div className="px-5 w-full max-w-4xl">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">
+              🚀 MemeVault
+            </h1>
+            <p className="text-xl text-gray-300 mb-6">Deposit meme coins, AI routes to highest yields across chains</p>
+            {isConnected ? (
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 inline-block">
+                <p className="text-white mb-2">Connected Wallet:</p>
+                <Address address={connectedAddress} />
+              </div>
+            ) : (
+              <p className="text-yellow-300">Connect your wallet to start earning yields!</p>
+            )}
           </div>
 
-          <p className="text-center text-lg">
-            Get started by editing{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              packages/nextjs/app/page.tsx
-            </code>
-          </p>
-          <p className="text-center text-lg">
-            Edit your smart contract{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              YourContract.sol
-            </code>{" "}
-            in{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              packages/hardhat/contracts
-            </code>
-          </p>
-        </div>
+          {isConnected && (
+            <div className="space-y-8">
+              {/* Mint Tokens Section */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+                <h2 className="text-2xl font-bold text-white mb-4">Get Test Tokens</h2>
+                <p className="text-gray-300 mb-4">Mint PEPE or DOGE tokens to your wallet for testing</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => handleMintTokens("0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9", "1000")}
+                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition-colors"
+                  >
+                    Mint 1000 PEPE
+                  </button>
+                  <button
+                    onClick={() => handleMintTokens("0x5FC8d32690cc91D4c39d9d3abcBD16989F875707", "1000")}
+                    className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg transition-colors"
+                  >
+                    Mint 1000 DOGE
+                  </button>
+                </div>
+              </div>
 
-        <div className="grow bg-base-300 w-full mt-16 px-8 py-12">
-          <div className="flex justify-center items-center gap-12 flex-col md:flex-row">
-            <div className="flex flex-col bg-base-100 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
-              <BugAntIcon className="h-8 w-8 fill-secondary" />
-              <p>
-                Tinker with your smart contract using the{" "}
-                <Link href="/debug" passHref className="link">
-                  Debug Contracts
-                </Link>{" "}
-                tab.
-              </p>
+              {/* Balance Display */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+                <h2 className="text-2xl font-bold text-white mb-4">Your Balance</h2>
+                <Balance address={connectedAddress!} className="text-white" />
+              </div>
+
+              {/* Deposit Form */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+                <h2 className="text-2xl font-bold text-white mb-4">Deposit Meme Coins</h2>
+                <DepositForm onSubmit={handleDepositSubmit} />
+              </div>
+
+              {/* Yield Dashboard */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+                <h2 className="text-2xl font-bold text-white mb-4">Your Yields</h2>
+                <YieldDashboard />
+              </div>
             </div>
-            <div className="flex flex-col bg-base-100 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
-              <MagnifyingGlassIcon className="h-8 w-8 fill-secondary" />
-              <p>
-                Explore your local transactions with the{" "}
-                <Link href="/blockexplorer" passHref className="link">
-                  Block Explorer
-                </Link>{" "}
-                tab.
-              </p>
-            </div>
-          </div>
+          )}
         </div>
       </div>
+
+      {/* AI Suggestion Modal */}
+      <AISuggestionModal
+        isOpen={showAISuggestion}
+        onClose={() => setShowAISuggestion(false)}
+        deposit={pendingDeposit}
+        onConfirm={handleAIConfirm}
+      />
     </>
   );
 };

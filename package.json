@@ -56,5 +56,14 @@
   "packageManager": "yarn@3.2.3",
   "engines": {
     "node": ">=20.18.3"
+  },
+  "dependencies": {
+    "@erc7824/nitrolite": "^0.4.0",
+    "@openzeppelin/contracts": "^5.4.0",
+    "@pythnetwork/pyth-sdk-solidity": "^4.2.0",
+    "avail-js-sdk": "^0.4.2",
+    "langchain": "^1.0.1",
+    "viem": "^2.38.4",
+    "wagmi": "^2.18.2"
   }
 }

@@ -21,3 +21,34 @@ node_modules
 
 # cli
 dist
+
+# environment variables
+.env
+.env.local
+.env.production
+.env.staging
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# hardhat
+artifacts/
+cache/
+typechain-types/
+
+# next.js
+.next/
+out/
+
+# production
+build/
+dist/
+
+# docs (optional - uncomment if you don't want to commit docs)
+# docs/
+
+# contributing files (optional)
+# CONTRIBUTING.md
